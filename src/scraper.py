@@ -3,6 +3,7 @@ from selenium.webdriver.edge.service import Service
 from selenium.webdriver.common.by import By
 import time
 import csv
+import re
 
 service = Service(r"msedgedriver.exe")
 driver = webdriver.Edge(service=service)
@@ -11,7 +12,18 @@ url = "https://divar.ir/s/tehran/buy-apartment"
 driver.get(url)
 time.sleep(5)
 
-# پیدا کردن container قابل‌اسکرول به‌صورت خودکار (با جاوااسکریپت)
+def extract_meterage(title):
+    match = re.search(r'(\d+)\s*متر', title)
+    if match:
+        return match.group(1)
+    return None
+
+def extract_district(bottom_text):
+    match = re.search(r'در\s+(.+)$', bottom_text)
+    if match:
+        return match.group(1).strip()
+    return None
+
 scroll_container = driver.execute_script("""
     let all = document.querySelectorAll('*');
     let best = null;
@@ -42,7 +54,22 @@ def collect_current_cards():
             if link in seen_links:
                 continue
             seen_links.add(link)
-            listings.append({"title": title, "price": price, "link": link})
+
+            try:
+                bottom_text = card.find_element(By.CLASS_NAME, "kt-post-card__bottom-description").text
+            except:
+                bottom_text = ""
+
+            meterage = extract_meterage(title)
+            district = extract_district(bottom_text)
+
+            listings.append({
+                "title": title,
+                "price": price,
+                "meterage": meterage,
+                "district": district,
+                "link": link
+            })
             new_count += 1
         except Exception:
             pass
@@ -62,7 +89,7 @@ for i in range(SCROLL_COUNT):
 driver.quit()
 
 with open("data/listings.csv", "w", newline="", encoding="utf-8-sig") as f:
-    writer = csv.DictWriter(f, fieldnames=["title", "price", "link"])
+    writer = csv.DictWriter(f, fieldnames=["title", "price", "meterage", "district", "link"])
     writer.writeheader()
     writer.writerows(listings)
 
