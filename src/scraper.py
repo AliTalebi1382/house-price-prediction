@@ -13,7 +13,12 @@ driver.get(url)
 time.sleep(5)
 
 def extract_meterage(title):
-    match = re.search(r'(\d+)\s*متر', title)
+    # حالت اول: عدد + (فاصله یا اسلش یا هیچی) + "متر"
+    match = re.search(r'(\d+)\s*/?\s*متر', title)
+    if match:
+        return match.group(1)
+    # حالت دوم: عدد + "م" به‌عنوان مخفف متر (فقط وقتی عدد ۲ یا ۳ رقمیه، برای جلوگیری از اشتباه با قیمت)
+    match = re.search(r'(\d{2,3})\s*م(?:تر)?[^ی]', title)
     if match:
         return match.group(1)
     return None
