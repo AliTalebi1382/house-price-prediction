@@ -3,58 +3,43 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, r2_score
 
-df = pd.read_csv("data/listings_clean.csv")
+df = pd.read_csv("data/listings_model_ready.csv")
 
-# گروه‌بندی مناطق کم‌تکرار به دسته‌ی "سایر"
+# گروه‌بندی مناطق کم‌تکرار
 district_counts = df['district'].value_counts()
 frequent_districts = district_counts[district_counts >= 5].index
 df['district_grouped'] = df['district'].apply(lambda x: x if x in frequent_districts else 'سایر')
 
-print("تعداد مناطق بعد از گروه‌بندی:", df['district_grouped'].nunique())
-
-# --- مدل اول: فقط متراژ ---
-X1 = df[['meterage']]
 y = df['price']
+mean_price = y.mean()
 
-X1_train, X1_test, y_train, y_test = train_test_split(X1, y, test_size=0.2, random_state=42)
+def run_model(feature_cols, df_encoded, label):
+    X = df_encoded[feature_cols]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    model = LinearRegression()
+    model.fit(X_train, y_train)
+    predictions = model.predict(X_test)
+    mae = mean_absolute_error(y_test, predictions)
+    r2 = r2_score(y_test, predictions)
+    print(f"=== {label} ===")
+    print(f"MAE: {mae:,.0f} تومان ({(mae/mean_price)*100:.1f}% از میانگین)")
+    print(f"R²: {r2:.3f}\n")
+    return r2, mae
 
-model1 = LinearRegression()
-model1.fit(X1_train, y_train)
-pred1 = model1.predict(X1_test)
+# --- مدل ۱: فقط متراژ ---
+r2_1, mae_1 = run_model(['meterage'], df, "مدل ۱: فقط متراژ")
 
-mae1 = mean_absolute_error(y_test, pred1)
-r2_1 = r2_score(y_test, pred1)
-mean_price = y_test.mean()
+# --- مدل ۲: متراژ + منطقه ---
+df_enc2 = pd.get_dummies(df, columns=['district_grouped'], drop_first=True)
+cols2 = ['meterage'] + [c for c in df_enc2.columns if c.startswith('district_grouped_')]
+r2_2, mae_2 = run_model(cols2, df_enc2, "مدل ۲: متراژ + منطقه")
 
-print("=== مدل اول: فقط با متراژ ===")
-print(f"MAE: {mae1:,.0f} تومان ({(mae1/mean_price)*100:.1f}% از میانگین)")
-print(f"R²: {r2_1:.3f}")
+# --- مدل ۳: متراژ + منطقه + طبقه + سال ساخت + اتاق ---
+df_enc3 = pd.get_dummies(df, columns=['district_grouped'], drop_first=True)
+cols3 = ['meterage', 'floor', 'build_year', 'rooms'] + [c for c in df_enc3.columns if c.startswith('district_grouped_')]
+r2_3, mae_3 = run_model(cols3, df_enc3, "مدل ۳: همه‌ی فیچرها")
 
-# --- مدل دوم: متراژ + منطقه ---
-df_encoded = pd.get_dummies(df, columns=['district_grouped'], drop_first=True)
-feature_cols = ['meterage'] + [col for col in df_encoded.columns if col.startswith('district_grouped_')]
-
-feature_cols = ['meterage'] + [col for col in df_encoded.columns if col.startswith('district_')]
-X2 = df_encoded[feature_cols]
-
-X2_train, X2_test, y_train2, y_test2 = train_test_split(X2, y, test_size=0.2, random_state=42)
-
-model2 = LinearRegression()
-model2.fit(X2_train, y_train2)
-pred2 = model2.predict(X2_test)
-
-mae2 = mean_absolute_error(y_test2, pred2)
-r2_2 = r2_score(y_test2, pred2)
-
-print("\n=== مدل دوم: متراژ + منطقه ===")
-print(f"MAE: {mae2:,.0f} تومان ({(mae2/mean_price)*100:.1f}% از میانگین)")
-print(f"R²: {r2_2:.3f}")
-
-print("\n=== مقایسه‌ی بهبود ===")
-print(f"بهبود R²: {r2_1:.3f} → {r2_2:.3f}")
-print(f"بهبود خطا: {(mae1/mean_price)*100:.1f}% → {(mae2/mean_price)*100:.1f}%")
-
-print("\n=== بررسی توزیع مناطق ===")
-print("تعداد مناطق منحصربه‌فرد:", df['district'].nunique())
-print("\nتوزیع تعداد آگهی در هر منطقه:")
-print(df['district'].value_counts().describe())
+print("=== مقایسه‌ی نهایی ===")
+print(f"مدل ۱ (فقط متراژ):        R²={r2_1:.3f}  |  خطا={mae_1/mean_price*100:.1f}%")
+print(f"مدل ۲ (+ منطقه):          R²={r2_2:.3f}  |  خطا={mae_2/mean_price*100:.1f}%")
+print(f"مدل ۳ (+ طبقه/سال/اتاق):  R²={r2_3:.3f}  |  خطا={mae_3/mean_price*100:.1f}%")
